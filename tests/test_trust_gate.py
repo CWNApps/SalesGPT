@@ -63,3 +63,30 @@ def test_tamper_breaks_verification():
     tampered["evidence"]["ontology"]["meddic_score"] = 0.99  # inflate the score after signing
     v = verify_receipt(tampered)
     assert v["ok"] is False
+
+
+# ---- Quantum Hardening (H4 + H3) -- standing pol.must_do.150 pattern -----------------
+
+@pytest.mark.skipif(not _HAS_OAO, reason="openagentontology not installed")
+def test_h4_minted_receipt_carries_kid():
+    import hashlib
+    r = mint_lead_handoff_receipt(LEAD)
+    # 128 bits of identifier -- adversarial collision resistance for offline "same notary?" use
+    assert r.get("kid") and len(r["kid"]) == 32
+    assert r["kid"] == hashlib.sha256(r["verify_pubkey_b64"].encode("ascii")).hexdigest()[:32]
+
+
+@pytest.mark.skipif(not _HAS_OAO, reason="openagentontology not installed")
+def test_h3_pq_required_rejects_pq_stripped_receipt():
+    r = mint_lead_handoff_receipt(LEAD)
+    stripped = copy.deepcopy(r)
+    for k in ("ml_dsa_signature_b64", "ml_dsa_public_key_b64",
+              "slh_dsa_signature_b64", "slh_dsa_public_key_b64"):
+        stripped.pop(k, None)
+    # default require_pq (env-driven, default True) must REJECT the stripped receipt
+    strict = verify_receipt(stripped)
+    assert strict["ok"] is False
+    assert "PQ-required" in strict["reason"]
+    # explicit opt-out preserves the legacy Ed25519 path for archival receipts
+    legacy = verify_receipt(stripped, require_pq=False)
+    assert legacy["ok"] is True
