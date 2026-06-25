@@ -127,11 +127,11 @@ def verify_receipt(receipt: Dict[str, Any],
     must = _require_pq_default() if require_pq is None else bool(require_pq)
     if must and out.get("ok") and out.get("signed"):
         legs = out.get("legs", {})
-        missing = [name for name in ("ml_dsa", "slh_dsa") if legs.get(name) != "ok"]
-        if missing:
+        pq_ok = any(legs.get(name) == "ok" for name in ("ml_dsa", "slh_dsa"))
+        if not pq_ok:
+            states = ", ".join(f"{n}={legs.get(n, 'absent')}" for n in ("ml_dsa", "slh_dsa"))
             out["ok"] = False
-            out["reason"] = ("PQ-required: " + ", ".join(missing) + " not verified ("
-                             + ", ".join(f"{m}={legs.get(m, 'absent')}" for m in missing) + "). "
-                             "Set TRUST_GATE_REQUIRE_PQ=false or pass require_pq=False to "
-                             "allow Ed25519-only verification.")
+            out["reason"] = (f"PQ-required: no post-quantum signature leg verified ({states}). "
+                             "Set TRUST_GATE_REQUIRE_PQ=false (or pass require_pq=False) to "
+                             "allow Ed25519-only verification of legacy receipts.")
     return out
